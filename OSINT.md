@@ -78,7 +78,7 @@ whois <IP>
 
 ### Mail
 #### Check spf, dkim, dmarc etc
-- https://github.com/BishopFox/spoofcheck
+- https://github.com/a6avind/spoofcheck
 ```
 ./spoofcheck.py <DOMAIN>
 ```
@@ -363,18 +363,16 @@ python3 cloud_enum.py -k <KEYWORD>
 - Federation with Azure AD or O365 enables users to authenticate using on-premises credentials and access all resources in cloud.
 ```
 https://login.microsoftonline.com/getuserrealm.srf?login=<USER>@<DOMAIN>&xml=1
-https://login.microsoftonline.com/getuserrealm.srf?login=root@defcorphq.onmicrosoft.com&xml=1
 ```
 
 #### Get the Tenant ID
 ```
 https://login.microsoftonline.com/<DOMAIN>/.well-known/openid-configuration
-https://login.microsoftonline.com/defcorphq.onmicrosoft.com/.well-known/openid-configuration
 ```
 
 ### AADinternals
-https://github.com/Gerenios/AADInternals
-https://o365blog.com/aadinternals/
+- https://github.com/Gerenios/AADInternals
+- https://o365blog.com/aadinternals/
 
 #### Import the AADinternals module
 ```
@@ -386,7 +384,7 @@ import-module .\AADInternals.psd1
 Invoke-AADIntReconAsOutsider -DomainName <DOMAIN>
 ```
 
-####  Get tenant name, authentication, brand name (usually same as directory name) and domain name
+#### Get tenant name, authentication, brand name (usually same as directory name) and domain name
 ```
 Get-AADIntLoginInformation -UserName <RANDOM USER>@<DOMAIN>
 ```
@@ -419,11 +417,11 @@ Invoke-EnumerateAzureBlobs -Base <SHORT DOMAIN> -OutputFile azureblobs.txt
 
 ### Valid emails
 #### Check for Email ID's
-- https://github.com/LMGsec/o365creeper
+- https://github.com/dievus/Oh365UserFinder
 - Could gather list of emails from something like harvester or hunter.io or smth and validate them!
 - admin, root, test, contact (try those default for exam)
 ```
-python o365creeper.py -f list_of_emails.txt -o validemails.txt
+python3 oh365userfinder.py -r emails.txt -w valid.txt -t 30
 ```
 - Possible to use https://github.com/nyxgeek/onedrive_user_enum (Non-lab-tool)
 
