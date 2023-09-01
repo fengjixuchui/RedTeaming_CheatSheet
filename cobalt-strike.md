@@ -234,7 +234,7 @@ powerpick $ExecutionContext.SessionState.LanguageMode
 
 #### Execute assembly in memory
 ```
-execute-assembly <PATH TO EXE> -group=system
+execute-assembly <PATH TO EXE>
 ```
 
 #### Load PowerShell script
@@ -678,6 +678,7 @@ kill <PID>
 ### Malleable C2 profile
 - Example: https://github.com/Cobalt-Strike/Malleable-C2-Profiles
 - Changes to C2 profile requires teamserver restart and a new beacon!
+- Good changes: https://github.com/WKL-Sec/Malleable-CS-Profiles
 
 #### Check profile for errors
 ```
@@ -847,6 +848,7 @@ beacon_remote_exploit_register("dcom", "x64", "Use DCOM to run a Beacon payload"
 - BOFs are essentially tiny COFF objects (written in C or C++) on which Beacon acts as a linker and loader. 
 - Download https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/beacon.h
 - Usefull BOFs:
+  - https://github.com/WKL-Sec/HiddenDesktop
   - https://github.com/trustedsec/CS-Situational-Awareness-BOF
   - https://github.com/CCob/BOF.NET
   - https://github.com/helpsystems/nanodump

